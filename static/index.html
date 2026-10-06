@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAT - Repo Analysis Tool</title>
+<link rel="stylesheet" href="/static/styles.css">
+<script src="/static/vendor/chart.umd.js"></script>
+<script src="/static/charts.js"></script>
+<script src="/static/app.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">RAT<span>Repo Analysis Tool</span></div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="authors">Authors</button>
+  </nav>
+</header>
+
+<div id="banner" class="banner hidden">
+  <span id="banner-text"></span>
+  <button id="banner-close" class="ghost small">dismiss</button>
+</div>
+
+<main>
+  <aside id="sidebar">
+    <h2>Repositories</h2>
+    <ul id="repo-list"></ul>
+    <div class="add-repo">
+      <h3>Add repository</h3>
+      <div class="seg">
+        <button id="mode-url" class="seg-btn active">Clone URL</button>
+        <button id="mode-zip" class="seg-btn">Upload zip</button>
+      </div>
+      <div id="url-pane">
+        <input id="url-input" type="text" spellcheck="false"
+               placeholder="https://github.com/owner/repo.git">
+        <button id="url-add" class="primary">Clone</button>
+      </div>
+      <div id="zip-pane" class="hidden">
+        <div id="dropzone">
+          <p>Drop a repository <b>.zip</b> here<br><small>the archive must contain the <code>.git</code> directory</small></p>
+          <label class="file-label">browse<input id="file-input" type="file" accept=".zip"></label>
+        </div>
+      </div>
+      <div id="job-progress" class="hidden">
+        <div class="bar"><div id="job-bar"></div></div>
+        <p id="job-msg" class="muted small"></p>
+        <p id="job-error" class="error small hidden"></p>
+      </div>
+    </div>
+  </aside>
+
+  <section id="content">
+    <div id="empty-state" class="empty">
+      <h2>No repositories yet</h2>
+      <p>Clone a remote repository by URL or upload a zip archive that
+         contains the <code>.git</code> directory.</p>
+      <p>All metrics are computed locally: file, directory, repository,
+         commit set and author metrics with filtering by author, path and
+         commit set.</p>
+    </div>
+
+    <div id="dashboard" class="hidden">
+      <div class="filterbar">
+        <div id="breadcrumb" class="crumb"></div>
+        <div class="filters">
+          <details id="author-filter" class="dd">
+            <summary>Authors: <span id="author-summary">all</span></summary>
+            <div class="dd-body" id="author-options"></div>
+          </details>
+          <details id="commit-filter" class="dd">
+            <summary>Commits: <span id="commit-summary">all time</span></summary>
+            <div class="dd-body">
+              <label class="radio"><input type="radio" name="cmode" value="all" checked> All time</label>
+              <label class="radio"><input type="radio" name="cmode" value="range"> Date range</label>
+              <div id="range-inputs" class="range hidden">
+                <input type="datetime-local" id="from-input">
+                <span class="muted">to</span>
+                <input type="datetime-local" id="to-input">
+              </div>
+              <label class="radio"><input type="radio" name="cmode" value="list">
+                Selected commits (<span id="sha-count">0</span>)</label>
+              <button id="open-commit-modal" class="ghost small">Choose commits...</button>
+            </div>
+          </details>
+          <button id="reset-filters" class="ghost">Reset filters</button>
+        </div>
+      </div>
+
+      <div id="loading" class="loading hidden">computing metrics...</div>
+
+      <div id="cards" class="cards"></div>
+
+      <div class="grid two">
+        <div class="panel">
+          <h3>Churn over time <small id="bucket-note" class="muted"></small></h3>
+          <div class="chart-box"><canvas id="churn-chart"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Ownership (share of churn)</h3>
+          <div class="chart-box"><canvas id="ownership-chart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel" id="treemap-panel">
+        <h3>Treemap of contents <small class="muted">area = churn, colour = growth</small></h3>
+        <div id="treemap" class="treemap"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3 id="children-title">Contents</h3>
+          <button id="export-csv" class="ghost small">Export CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table id="children-table">
+            <thead><tr>
+              <th data-sort="name">Name</th>
+              <th data-sort="kind">Type</th>
+              <th data-sort="added" class="num">Added</th>
+              <th data-sort="removed" class="num">Removed</th>
+              <th data-sort="growth" class="num">Growth</th>
+              <th data-sort="churn" class="num">Churn</th>
+              <th data-sort="modifications" class="num">Mods</th>
+              <th data-sort="modification_frequency" class="num">Mod freq</th>
+              <th data-sort="churn_rate" class="num">Churn rate</th>
+            </tr></thead>
+            <tbody id="children-body"></tbody>
+          </table>
+        </div>
+        <p id="children-empty" class="muted hidden">No objects in this commit set.</p>
+      </div>
+
+      <div class="panel">
+        <h3>Authors on this object</h3>
+        <div class="table-wrap">
+          <table id="object-authors">
+            <thead><tr>
+              <th>Author</th>
+              <th class="num">Added</th>
+              <th class="num">Removed</th>
+              <th class="num">Churn</th>
+              <th class="num">Mods</th>
+              <th>Ownership</th>
+            </tr></thead>
+            <tbody id="object-authors-body"></tbody>
+          </table>
+        </div>
+        <p id="object-authors-empty" class="muted hidden">No authors in this commit set.</p>
+      </div>
+    </div>
+
+    <div id="authors-page" class="hidden">
+      <div class="panel">
+        <h3>Author identities</h3>
+        <p class="muted">Identities are merged automatically from the repository
+           <code>.mailmap</code> (shown as the same group). Select identities and
+           merge them manually when the mailmap does not cover them.</p>
+        <div class="table-wrap">
+          <table id="authors-table">
+            <thead><tr>
+              <th class="pick"></th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Current group</th>
+              <th class="num">Commits</th>
+              <th class="num">Churn</th>
+            </tr></thead>
+            <tbody id="authors-body"></tbody>
+          </table>
+        </div>
+        <div class="merge-bar">
+          <input id="merge-name" type="text" placeholder="Merged display name">
+          <button id="merge-button" class="primary">Merge selected</button>
+          <span id="merge-hint" class="muted small"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <header>
+      <h3>Select commits</h3>
+      <span id="modal-total" class="muted small"></span>
+    </header>
+    <input id="commit-search" type="text" placeholder="Search by hash or message..." spellcheck="false">
+    <div id="commit-list" class="commit-list"></div>
+    <footer>
+      <span id="selection-count" class="muted small">0 selected</span>
+      <div>
+        <button id="selection-clear" class="ghost">Clear</button>
+        <button id="selection-apply" class="primary">Apply selection</button>
+        <button id="modal-close" class="ghost">Close</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+</body>
+</html>

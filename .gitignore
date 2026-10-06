@@ -1,0 +1,15 @@
+# Runtime data: SQLite DB and cloned/uploaded repositories
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
